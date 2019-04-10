@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en-us">
+<head>
+  <link href="//gmpg.org/xfn/11" rel="profile">
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="generator" content="Hugo 0.54.0" />
+
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Airtable Expense Logging with Ledger Mode &middot; Levi Tan Ong</title>
+
+  
+  <link type="text/css" rel="stylesheet" href="https://levitanong.com/css/print.css" media="print">
+  <link type="text/css" rel="stylesheet" href="https://levitanong.com/css/poole.css">
+  <link type="text/css" rel="stylesheet" href="https://levitanong.com/css/syntax.css">
+  <link type="text/css" rel="stylesheet" href="https://levitanong.com/css/hyde.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Abril+Fatface|PT+Sans:400,400i,700">
+
+
+  
+  <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch-icon-144-precomposed.png">
+  <link rel="shortcut icon" href="/favicon.png">
+
+  
+  <link href="" rel="alternate" type="application/rss+xml" title="Levi Tan Ong" />
+
+  <link type="text/css" rel="stylesheet" href="/css/custom.css">
+
+</head>
+
+  <body class="theme-base-08 ">
+  <aside class="sidebar">
+  <div class="container sidebar-sticky">
+    <div class="sidebar-about">
+      <a href="https://levitanong.com/"><h1>Levi Tan&nbsp;Ong</h1></a>
+      <p class="lead">
+       Full Stack Developer, Lisp Enthusiast, Reluctant Designer 
+      </p>
+    </div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="https://levitanong.com/">Home</a> </li>
+        
+      </ul>
+    </nav>
+
+    <p>&copy; 2019. All rights reserved. </p>
+  </div>
+</aside>
+
+    <main class="content container">
+    <div class="post">
+  <h1>Airtable Expense Logging with Ledger Mode</h1>
+  <time datetime=2019-04-11T00:00:00&#43;0800 class="post-date">Thu, Apr 11, 2019</time>
+  
+
+<h2 id="summary">Summary</h2>
+
+<p>Many companies and organizations subsidize certain things like transit, food,
+and lodging for their employees, with the requirement that the latter log these
+expenses via some system defined by the Powers That Be. My company uses
+<a href="https://airtable.com">Airtable</a>.&nbsp;<sup class="footnote-ref" id="fnref:fn-1"><a href="#fn:fn-1">1</a></sup></p>
+
+<p>If you use <a href="https://www.ledger-cli.org/">Ledger</a> to maintain your personal accounting, or really any other
+method for that matter (but seriously. Use Ledger), it can and will be tedious
+to log your subsidized/reimbursable expenses on both Ledger <em>and</em> Airtable.
+Despite the inconvenience, this data is valuable to you, and you should keep
+track of it to better understand your lifestyle.</p>
+
+<p>Luckily for us, Airtable has an API, and emacs is emacs. This article details my
+efforts in building a set of emacs functions for posting expenses from a Ledger
+file onto Airtable. Because I want this article to be as accessible and as
+informative as possible, I will go through the derivation of this script
+including exploring ledger-mode&rsquo;s implementation.</p>
+
+<h2 id="ledger">Ledger</h2>
+
+<h3 id="a-typical-receipt">A Typical Receipt</h3>
+
+<p>Let&rsquo;s say that earlier in the day, you needed to gas up, so you passed by
+Richard Stallman&rsquo;s Gas Station. It just so happens that the Philippine Peso
+(PHP), despite all odds, has become the dominant currency of the United States.
+The acronym is no longer associated with PHP: Hypertext Processor, and the
+latter is now nothing more than a bad memory.</p>
+
+<p><a id="code-snippet--Gas Receipt"></a></p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ledger" data-lang="ledger">2019/03/29 Richard Stallman&#39;s Gas Station
+    expenses:transport:fuel                     2000 PHP
+    expenses:food                                200 PHP
+    assets:cash                                -2200 PHP</code></pre></div>
+<p>You also spent 200 PHP on food because it was there, just begging to be bought,
+and human nature doesn&rsquo;t change much between parallel realities.</p>
+
+<p>In ledger, we call the snippet above an <code>xact</code> as a whole, rather than a
+transaction. To avoid confusion, we&rsquo;ll have to define a bunch of terms.</p>
+
+<h3 id="definition-of-terms">Definition of Terms</h3>
+
+<h4 id="payee">payee</h4>
+
+<p>A description of the xact. Could be just as simple as &ldquo;John&rdquo;, or &ldquo;McDonald&rsquo;s&rdquo;,
+but sometimes it&rsquo;s more detailed, like &ldquo;Martine, for that gallon of mayonnaise.&rdquo;</p>
+
+<h4 id="account">account</h4>
+
+<p>A &ldquo;bucket&rdquo; of money. In Ledger, accounts can have a sort of tree structure where
+&ldquo;Tags&rdquo; of increasing specificity are joined together by colons to give structure
+and grouping. e.g. <code>expenses:transport:fuel</code>, <code>assets:cash</code>, <code>assets:savings:php</code></p>
+
+<h4 id="transaction">transaction</h4>
+
+<p>A line item detailing a change in the amount stored in an <code>account</code>. The
+<code>account</code> is separated from the amount by at least two spaces. Referred to in
+the Ledger source as <code>acct-transaction</code>. For example:</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-ledger" data-lang="ledger">expenses:transport:fuel  2000 PHP</code></pre></div>
+<p>An <code>xact</code> is a group of <code>transactions</code> contextualized by a date and a <code>payee</code>.</p>
+
+<h3 id="utility">Utility</h3>
+
+<p>Before we start tinkering, we have to first realize that since we&rsquo;re using
+org-mode and babel, we can execute whatever code we write. We&rsquo;re referring to
+that gas receipt above, so we need to find some way to easily refer to various
+parts of that receipt easily. <code>org-babel-goto-named-src-block</code> exists.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">org-babel-goto-named-src-block</span> <span style="color:#48b685">&#34;Gas Receipt&#34;</span>)
+  (<span style="color:#ef6155">org-element-at-point</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">(src-block
+ (:language &#34;ledger&#34; :switches nil :parameters &#34;:results silent&#34; :begin 1643 :end 1922 :number-lines nil :preserve-indent nil :retain-labels t :use-labels t :label-fmt nil :value &#34;2019/03/29 Richard Stallman&#39;s Gas Station\n    expenses:transport:fuel                     2000 PHP\n    expenses:food                                200 PHP\n    assets:cash                                -2200 PHP\n&#34; :post-blank 1 :post-affiliated 1663 :name &#34;Gas Receipt&#34; :parent nil))</code></pre></div>
+<p>Yup, that looks right. If we go down one row, we should get both the date and
+payee.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">org-babel-goto-named-src-block</span> <span style="color:#48b685">&#34;Gas Receipt&#34;</span>)
+  (<span style="color:#ef6155">next-line</span>)
+  (<span style="color:#ef6155">thing-at-point</span> <span style="color:#48b685">&#39;line</span> <span style="color:#ef6155">t</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;2019/03/29 Richard Stallman&#39;s Gas Station\n&#34;</code></pre></div>
+<p>Booyeah. Let&rsquo;s wrap this all up into a function.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">goto-gas-receipt</span> (<span style="color:#ef6155">line-offset</span>)
+  (<span style="color:#ef6155">org-babel-goto-named-src-block</span> <span style="color:#48b685">&#34;Gas Receipt&#34;</span>)
+  (<span style="color:#ef6155">next-line</span> <span style="color:#ef6155">line-offset</span>))</code></pre></div>
+<p>Let&rsquo;s test it.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">2</span>)
+  (<span style="color:#ef6155">thing-at-point</span> <span style="color:#48b685">&#39;line</span> <span style="color:#ef6155">t</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;    expenses:transport:fuel                     2000 PHP\n&#34;</code></pre></div>
+<p>We&rsquo;re ready!</p>
+
+<h3 id="the-payee">The Payee</h3>
+
+<p>Let&rsquo;s rummage through the ledger <a href="https://github.com/ledger/ledger-mode">source</a> to see if we can find a good starting
+point. It turns out that <a href="https://github.com/ledger/ledger-mode/blob/c59bbfcc3274d113dec68121786546979f33dad0/ledger-xact.el#L65">ledger-xact-payee</a> exists. <code>ledger-xact-payee</code> uses
+<code>point</code>, which means we get to use our cool utility function!</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">1</span>)
+  (<span style="color:#ef6155">ledger-xact-payee</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Richard Stallman&#39;s Gas Station</code></pre></div>
+<p>Great, it works as advertized. We also want to figure out the date and the
+amount, so let&rsquo;s see how <code>ledger-xact-payee</code> found the payee.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-xact-payee</span> ()
+  <span style="color:#48b685">&#34;Return the payee of the transaction containing point or nil.&#34;</span>
+  (let ((<span style="color:#ef6155">i</span> <span style="color:#f99b15">0</span>)) <span style="color:#776e71">;; (1)</span>
+    (while (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span>
+                (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>))
+               <span style="color:#48b685">&#39;acct-transaction</span>)
+      (setq <span style="color:#ef6155">i</span> (<span style="color:#06b6ef">-</span> <span style="color:#ef6155">i</span> <span style="color:#f99b15">1</span>))) <span style="color:#776e71">;; (2)</span>
+    (let ((<span style="color:#ef6155">context-info</span> (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>)))
+      (if (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">context-info</span>) <span style="color:#48b685">&#39;xact</span>) <span style="color:#776e71">;; (3)</span>
+          (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">context-info</span> <span style="color:#48b685">&#39;payee</span>) <span style="color:#776e71">;; (4)</span>
+        <span style="color:#ef6155">nil</span>))))</code></pre></div>
+<p>So it looks like:</p>
+
+<ol>
+<li>We start from point</li>
+<li>Move up a line if we&rsquo;re in an account transaction</li>
+<li>If the line is the <code>xact</code></li>
+<li>Return the <code>payee</code>.</li>
+</ol>
+
+<p>Simple enough! It shouldn&rsquo;t be much different in getting the date.</p>
+
+<h3 id="the-date">The Date</h3>
+
+<p>Unfortunately, I haven&rsquo;t found anything like <code>ledger-xact-date</code>, so we&rsquo;ll have
+to build our own. Since the implementation would be too similar to
+<code>ledger-xact-payee</code>, I thought it would be worth refactoring <code>ledger-xact-payee</code>
+into something more general and composable.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-xact-context</span>
+  <span style="color:#48b685">&#34;Return the context of the transaction containing point or nil.&#34;</span>
+  (let ((<span style="color:#ef6155">i</span> <span style="color:#f99b15">0</span>))
+    (while (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span>
+                (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>))
+               <span style="color:#48b685">&#39;acct-transaction</span>)
+      (setq <span style="color:#ef6155">i</span> (<span style="color:#06b6ef">-</span> <span style="color:#ef6155">i</span> <span style="color:#f99b15">1</span>)))
+    (let ((<span style="color:#ef6155">context-info</span> (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>)))
+      (if (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">context-info</span>) <span style="color:#48b685">&#39;xact</span>)
+          <span style="color:#ef6155">context-info</span>
+        <span style="color:#ef6155">nil</span>))))
+
+(defun <span style="color:#ef6155">ledger-xact-payee</span> ()
+  <span style="color:#48b685">&#34;Return the payee of the transaction containing point or nil.&#34;</span>
+  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>)))
+    (if <span style="color:#ef6155">xact-context</span>
+        (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>)
+      <span style="color:#ef6155">nil</span>)))</code></pre></div>
+<p>This way, we can just use <code>ledger-context-field-value</code> to get the date or payee.
+I have, in fact, submitted a <a href="https://github.com/ledger/ledger-mode/pull/168">PR</a> to ledger-mode. I hope it will be accepted!</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">1</span>)
+  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>)))
+    (<span style="color:#06b6ef">list</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;date</span>)
+          (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>))))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(<span style="color:#48b685">&#34;2019/03/29&#34;</span> <span style="color:#48b685">&#34;Richard Stallman&#39;s Gas Station&#34;</span>)</code></pre></div>
+<p>Shazam!</p>
+
+<h3 id="the-amount">The Amount</h3>
+
+<p>There are always at least two amounts in every <code>xact</code> because of double-entry
+bookkeeping.&nbsp;<sup class="footnote-ref" id="fnref:fn-2"><a href="#fn:fn-2">2</a></sup> Because ledger entries can get more complicated
+than this, we can&rsquo;t just assume the simplest case. Instead, we can just <em>not</em>
+assume and let the user specify it for us! We don&rsquo;t need to travel past our
+point, which means we can use <code>(ledger-context-at-point)</code>.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
+  (let ((<span style="color:#ef6155">point-context</span> (<span style="color:#ef6155">ledger-context-at-point</span>)))
+    (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>))
+  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp"><span style="color:#48b685">&#34;-2200 PHP&#34;</span></code></pre></div>
+<h3 id="convenience">Convenience</h3>
+
+<p>We now have everything we need to create a function that can return all the data
+we need in a convenient form.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">airtable--expense-data</span> ()
+  <span style="color:#48b685">&#34;Return transaction data for submitting an expense report.&#34;</span>
+  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>))
+        (<span style="color:#ef6155">point-context</span> (<span style="color:#ef6155">ledger-context-at-point</span>)))
+    (if (and <span style="color:#ef6155">xact-context</span>
+             (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">point-context</span>) <span style="color:#48b685">&#39;acct-transaction</span>)
+             (<span style="color:#ef6155">ledger-context-field-present-p</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>))
+        (let ((<span style="color:#ef6155">tx-data</span> (<span style="color:#06b6ef">list</span>))
+              (<span style="color:#ef6155">date</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;date</span>))
+              (<span style="color:#ef6155">payee</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>))
+              (<span style="color:#ef6155">amount</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>)))
+          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;date</span> <span style="color:#ef6155">date</span>)
+          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;payee</span> <span style="color:#ef6155">payee</span>)
+          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;amount</span> <span style="color:#ef6155">amount</span>)
+          <span style="color:#ef6155">tx-data</span>)
+      <span style="color:#ef6155">nil</span>)))
+
+(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
+  (<span style="color:#ef6155">airtable--expense-data</span>)
+  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">((<span style="color:#ef6155">amount</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;-2200 PHP&#34;</span>)
+ (<span style="color:#ef6155">payee</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Richard Stallman&#39;s Gas Station&#34;</span>)
+ (<span style="color:#ef6155">date</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2019/03/29&#34;</span>))</code></pre></div>
+<p>Now we have a nice, convenient associative data structure containing everything
+we need for the next part.</p>
+
+<h2 id="airtable">Airtable</h2>
+
+<h3 id="setup">Setup</h3>
+
+<p>This section is tricky, because this involves secrets: the &ldquo;project id&rdquo; included
+in the URL, and the API key. Mine are&hellip; just kidding. Let&rsquo;s load the encrypted
+secrets.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(<span style="color:#ef6155">load-file</span> <span style="color:#48b685">&#34;../secrets/airtable-secrets.el&#34;</span>)
+(require <span style="color:#48b685">&#39;airtable-secrets</span>)</code></pre></div>
+<p>We&rsquo;ll need the excellent <a href="https://github.com/tkf/emacs-request">emacs-request</a> library.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(use-package <span style="color:#ef6155">request</span> :ensure <span style="color:#ef6155">t</span>)</code></pre></div>
+<p>Each Airtable <strong>base</strong> has its own tables and schema, so it will be up you to
+figure out the right table to interact with, and exact fields to use in the JSON
+payload. Let&rsquo;s created a blank airtable base from the <a href="https://airtable.com/templates/hr-and-recruiting/expAJmFL8SkCqfjnj/expense-tracking">expense tracking template</a>.
+We can figure out the api for this particular base by going to
+<a href="https://airtable.com/api">https://airtable.com/api</a> and selecting the base we just made.</p>
+
+<h3 id="experimentation">Experimentation</h3>
+
+<p>I&rsquo;m wary about running POST requests right off the bat without being sure about
+our requests. We&rsquo;ll use <code>request.el</code> for our http needs. Let&rsquo;s try to get the
+list of receipts, and since we&rsquo;re only doing this for confirmation, we can set
+(1) <code>maxRecords</code> to 1. We need to make the request synchronous (2) so that org
+mode can capture the returned value.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(<span style="color:#ef6155">request-response-data</span>
+ (<span style="color:#ef6155">request</span> <span style="color:#ef6155">airtable-secrets-url</span>
+          :type <span style="color:#48b685">&#34;GET&#34;</span>
+          :params <span style="color:#5bc4bf">&#39;</span>((<span style="color:#48b685">&#34;maxRecords&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">1</span>) <span style="color:#776e71">;; (1)</span>
+                    (<span style="color:#48b685">&#34;view&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Main View&#34;</span>))
+          :sync <span style="color:#ef6155">t</span> <span style="color:#776e71">;; (2)</span>
+          :parser <span style="color:#48b685">&#39;json-read</span>
+          :headers <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;Content-Type&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;application/json&#34;</span>)
+                     (<span style="color:#48b685">&#34;Authorization&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span>(<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;Bearer %s&#34;</span> <span style="color:#ef6155">airtable-secrets-auth-token</span>)))))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">((<span style="color:#ef6155">records</span> <span style="color:#5bc4bf">.</span>
+          [((<span style="color:#ef6155">id</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;recvM8nBwdDtki4vo&#34;</span>)
+            (<span style="color:#ef6155">fields</span>
+             (<span style="color:#ef6155">Receipt\ Photo</span> <span style="color:#5bc4bf">.</span>
+                             [((<span style="color:#ef6155">id</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;attRl2O8I67NQBQXo&#34;</span>)
+                               (<span style="color:#ef6155">url</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;https://dl.airtable.com/0cWfA9hiTOWP5QfdUNij_cactuscastle.jpg&#34;</span>)
+                               (<span style="color:#ef6155">filename</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;cactuscastle.jpg&#34;</span>)
+                               (<span style="color:#ef6155">size</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">16064</span>)
+                               (<span style="color:#ef6155">type</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;image/jpeg&#34;</span>)
+                               (<span style="color:#ef6155">thumbnails</span>
+                                (<span style="color:#ef6155">small</span>
+                                 (<span style="color:#ef6155">url</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;https://dl.airtable.com/MBqpodIaQJWI62Q5t1iq_cactuscastle.jpg&#34;</span>)
+                                 (<span style="color:#ef6155">width</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">48</span>)
+                                 (<span style="color:#ef6155">height</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">36</span>))
+                                (<span style="color:#ef6155">large</span>
+                                 (<span style="color:#ef6155">url</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;https://dl.airtable.com/WQVXLIuiQTGYIgDoAIxY_cactuscastle.jpg&#34;</span>)
+                                 (<span style="color:#ef6155">width</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">256</span>)
+                                 (<span style="color:#ef6155">height</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">191</span>))))])
+             (<span style="color:#ef6155">Category</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Interior Decor&#34;</span>)
+             (<span style="color:#ef6155">Short\ Description</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Cactus&#34;</span>)
+             (<span style="color:#ef6155">Total</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">11.5</span>)
+             (<span style="color:#ef6155">Date\ &amp;\ Time</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2015-11-06T14:22:00.000Z&#34;</span>)
+             (<span style="color:#ef6155">Notes</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;A cute blue cactus with golden spines, will go great in the dining room.&#34;</span>)
+             (<span style="color:#ef6155">Who\ Paid\?</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Maritza&#34;</span>))
+            (<span style="color:#ef6155">createdTime</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2015-08-03T23:10:03.000Z&#34;</span>))]))</code></pre></div>
+<p>Great, we got a response! Now let&rsquo;s try to POST a new entry. We&rsquo;re setting the
+payor as &ldquo;Quinns&rdquo; because that&rsquo;s one of two values allowed by the template.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(<span style="color:#ef6155">request-response-data</span>
+ (<span style="color:#ef6155">request</span> <span style="color:#ef6155">airtable-secrets-url</span>
+          :type <span style="color:#48b685">&#34;POST&#34;</span>
+          :sync <span style="color:#ef6155">t</span>
+          :parser <span style="color:#48b685">&#39;json-read</span>
+          :data (<span style="color:#ef6155">json-encode</span> <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;fields&#34;</span> <span style="color:#5bc4bf">.</span> ((<span style="color:#48b685">&#34;Short Description&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Testing&#34;</span>)
+                                            (<span style="color:#48b685">&#34;Who Paid?&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Quinns&#34;</span>) <span style="color:#776e71">;; (1)</span>
+                                            (<span style="color:#48b685">&#34;Date &amp; Time&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2019-04-09T14:22:00.000Z&#34;</span>)
+                                            (<span style="color:#48b685">&#34;Total&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">10</span>)
+                                            ))))
+          :headers <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;Content-Type&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;application/json&#34;</span>)
+                     (<span style="color:#48b685">&#34;Authorization&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span>(<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;Bearer %s&#34;</span> <span style="color:#ef6155">airtable-secrets-auth-token</span>)))
+          ))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">((<span style="color:#ef6155">id</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;recFyrCYKAAwjELUr&#34;</span>)
+ (<span style="color:#ef6155">fields</span>
+  (<span style="color:#ef6155">Short\ Description</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Testing&#34;</span>)
+  (<span style="color:#ef6155">Total</span> <span style="color:#5bc4bf">.</span> <span style="color:#f99b15">10</span>)
+  (<span style="color:#ef6155">Date\ &amp;\ Time</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2019-04-09T14:22:00.000Z&#34;</span>)
+  (<span style="color:#ef6155">Who\ Paid\?</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Quinns&#34;</span>))
+ (<span style="color:#ef6155">createdTime</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2019-04-09T11:25:12.000Z&#34;</span>))</code></pre></div>
+<h3 id="packaging">Packaging</h3>
+
+<p>We can now create a command to post expenses! Don&rsquo;t forget to make it
+<code>interactive</code>, so we can invoke it from <code>M-x</code>.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-airtable-post-expense</span> ()
+  <span style="color:#48b685">&#34;Post an expense at point to Airtable.&#34;</span>
+  (interactive)
+  (let* ((<span style="color:#ef6155">xact-data</span> (<span style="color:#ef6155">airtable--expense-data</span>))
+         (<span style="color:#ef6155">xact-date</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;date</span> <span style="color:#ef6155">xact-data</span>)))
+         (<span style="color:#ef6155">xact-amount</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;amount</span> <span style="color:#ef6155">xact-data</span>)))
+         (<span style="color:#ef6155">xact-payee</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;payee</span> <span style="color:#ef6155">xact-data</span>)))
+         (<span style="color:#ef6155">amount</span> (<span style="color:#06b6ef">abs</span> (<span style="color:#06b6ef">string-to-number</span> (<span style="color:#06b6ef">car</span> (<span style="color:#ef6155">split-string</span> <span style="color:#ef6155">xact-amount</span>)))))
+         (<span style="color:#ef6155">date</span> (<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;%sT12:00:00.000Z&#34;</span>
+                       (<span style="color:#ef6155">replace-regexp-in-string</span> (<span style="color:#06b6ef">regexp-quote</span> <span style="color:#48b685">&#34;/&#34;</span>) <span style="color:#48b685">&#34;-&#34;</span> <span style="color:#ef6155">xact-date</span>))))
+    (<span style="color:#ef6155">request</span> <span style="color:#ef6155">airtable-secrets-url</span>
+             :type <span style="color:#48b685">&#34;POST&#34;</span>
+             :sync <span style="color:#ef6155">t</span>
+             :parser <span style="color:#48b685">&#39;json-read</span>
+             :data (<span style="color:#ef6155">json-encode</span> <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;fields&#34;</span> <span style="color:#5bc4bf">.</span> ((<span style="color:#48b685">&#34;Short Description&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">xact-payee</span>)
+                                               (<span style="color:#48b685">&#34;Who Paid?&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Quinns&#34;</span>)
+                                               (<span style="color:#48b685">&#34;Date &amp; Time&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">date</span>)
+                                               (<span style="color:#48b685">&#34;Total&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">amount</span>)
+                                               ))))
+             :headers <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;Content-Type&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;application/json&#34;</span>)
+                        (<span style="color:#48b685">&#34;Authorization&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span>(<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;Bearer %s&#34;</span> <span style="color:#ef6155">airtable-secrets-auth-token</span>)))
+             :success (cl-function
+                       (lambda (<span style="color:#815ba4">&amp;key</span> <span style="color:#ef6155">data</span> <span style="color:#815ba4">&amp;allow-other-keys</span>)
+                         (<span style="color:#06b6ef">print</span> <span style="color:#48b685">&#34;Expense Posted!&#34;</span>)))
+             :error (cl-function
+                     (lambda (<span style="color:#815ba4">&amp;key</span> <span style="color:#ef6155">error-thrown</span> <span style="color:#815ba4">&amp;allow-other-keys</span>)
+                       (<span style="color:#06b6ef">print</span> <span style="color:#ef6155">error-thrown</span>))))))
+
+(save-excursion
+  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
+  (<span style="color:#ef6155">ledger-airtable-post-expense</span>)
+  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;Expense Posted!&#34;</code></pre></div>
+<p>A quick trip to Airtable tells me that indeed, the entry has been posted. Now
+all I have to do is take a picture of the receipt, but that&rsquo;s out of our scope
+because the Airtable mobile app makes that easy.</p>
+
+<p>Notice that we have filled up the various callback functions in the <code>request</code>,
+because we want this function to run asynchronously.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>By now, you probably realized why I didn&rsquo;t turn this into a library: the
+implementation of <code>ledger-airtable-post-expense</code> is too dependent on the schema
+of the Airtable base it wants to talk to. I could factor this out to accept some
+function that allows one to build out the <code>&quot;fields&quot;</code> data structure, but at that
+point, we go back to the implementation we came up with here.</p>
+
+<p>That being said, feel free to copy this function and modify it to suit your
+needs. Just remember, you do so at your own risk. I am not responsible for you
+messing up your whole company&rsquo;s database. ;)</p>
+<div class="footnotes">
+
+<hr />
+
+<ol>
+<li id="fn:fn-1">My company also uses Airtable for other administrative tasks like tracking leaves of absence and many other things. We&rsquo;ve mostly switched over to <a href="https://www.notion.so">Notion</a> because it performs better as a knowledge base, but unfortnately Notion doesn&rsquo;t have an API.
+ <a class="footnote-return" href="#fnref:fn-1"><sup>[return]</sup></a></li>
+<li id="fn:fn-2">An ancient technique that Ledger is all about. This <a href="https://martin.kleppmann.com/2011/03/07/accounting-for-computer-scientists.html">article</a> greatly helped me understand this thing.
+ <a class="footnote-return" href="#fnref:fn-2"><sup>[return]</sup></a></li>
+</ol>
+</div>
+
+</div>
+
+
+    </main>
+
+    
+  </body>
+</html>
