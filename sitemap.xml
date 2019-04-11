@@ -3,12 +3,24 @@
   xmlns:xhtml="http://www.w3.org/1999/xhtml">
   
   <url>
+    <loc>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</loc>
+    <lastmod>2019-04-11T13:03:32+08:00</lastmod>
+  </url>
+  
+  <url>
     <loc>https://levitanong.com/categories/</loc>
     <priority>0</priority>
   </url>
   
   <url>
     <loc>https://levitanong.com/</loc>
+    <lastmod>2019-04-11T13:03:32+08:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://levitanong.com/posts/</loc>
+    <lastmod>2019-04-11T13:03:32+08:00</lastmod>
     <priority>0</priority>
   </url>
   
