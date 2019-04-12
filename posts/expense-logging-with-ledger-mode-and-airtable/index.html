@@ -55,8 +55,21 @@
     <main class="content container">
     <div class="post">
   <h1>Airtable Expense Logging with Ledger Mode</h1>
-  <time datetime=2019-04-11T20:32:49&#43;0800 class="post-date">Thu, Apr 11, 2019</time>
+  <time datetime=2019-04-13T02:03:42&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
   
+
+<h2 id="changelog">Changelog</h2>
+
+<h3 id="2019-4-13">2019/4/13</h3>
+
+<p>My <a href="https://github.com/ledger/ledger-mode/pull/168">PR</a> implementing <code>ledger-xact-date</code> got accepted, so had to rewrite a bunch.</p>
+
+<ul>
+<li>Merged payee and date sections into new <code>xact</code> section.</li>
+<li>Added utility function to get transaction amount value.</li>
+<li>Changed implementation of final airtable exporting function to make use of
+<code>ledger-xact-date</code> and <code>ledger-transaction-amount-value</code></li>
+</ul>
 
 <h2 id="summary">Summary</h2>
 
@@ -145,70 +158,15 @@ payee.</p>
   (<span style="color:#ef6155">thing-at-point</span> <span style="color:#48b685">&#39;line</span> <span style="color:#ef6155">t</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;    expenses:transport:fuel                     2000 PHP\n&#34;</code></pre></div>
 <p>We&rsquo;re ready!</p>
 
-<h3 id="the-payee">The Payee</h3>
+<h3 id="the-xact">The <code>xact</code></h3>
 
-<p>Let&rsquo;s rummage through the ledger <a href="https://github.com/ledger/ledger-mode">source</a> to see if we can find a good starting
-point. It turns out that <a href="https://github.com/ledger/ledger-mode/blob/c59bbfcc3274d113dec68121786546979f33dad0/ledger-xact.el#L65">ledger-xact-payee</a> exists. <code>ledger-xact-payee</code> uses
-<code>point</code>, which means we get to use our cool utility function!</p>
+<p>Conveniently, we have <code>ledger-xact-payee</code> and <code>ledger-xact-date</code> <code>point</code>. And
+since both work with <code>point</code>, we get to use our cool utility function!</p>
 <div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">1</span>)
-  (<span style="color:#ef6155">ledger-xact-payee</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">Richard Stallman&#39;s Gas Station</code></pre></div>
-<p>Great, it works as advertised. We also want to figure out the date and the
-amount, so let&rsquo;s see how <code>ledger-xact-payee</code> found the payee.</p>
-<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-xact-payee</span> ()
-  <span style="color:#48b685">&#34;Return the payee of the transaction containing point or nil.&#34;</span>
-  (let ((<span style="color:#ef6155">i</span> <span style="color:#f99b15">0</span>)) <span style="color:#776e71">;; (1)</span>
-    (while (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span>
-                (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>))
-               <span style="color:#48b685">&#39;acct-transaction</span>)
-      (setq <span style="color:#ef6155">i</span> (<span style="color:#06b6ef">-</span> <span style="color:#ef6155">i</span> <span style="color:#f99b15">1</span>))) <span style="color:#776e71">;; (2)</span>
-    (let ((<span style="color:#ef6155">context-info</span> (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>)))
-      (if (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">context-info</span>) <span style="color:#48b685">&#39;xact</span>) <span style="color:#776e71">;; (3)</span>
-          (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">context-info</span> <span style="color:#48b685">&#39;payee</span>) <span style="color:#776e71">;; (4)</span>
-        <span style="color:#ef6155">nil</span>))))</code></pre></div>
-<p>So it looks like:</p>
-
-<ol>
-<li>We start from point</li>
-<li>Move up a line if we&rsquo;re in an account transaction</li>
-<li>If the line is the <code>xact</code></li>
-<li>Return the <code>payee</code>.</li>
-</ol>
-
-<p>Simple enough! It shouldn&rsquo;t be much different in getting the date.</p>
-
-<h3 id="the-date">The Date</h3>
-
-<p>Unfortunately, I haven&rsquo;t found anything like <code>ledger-xact-date</code>, so we&rsquo;ll have
-to build our own. Since the implementation would be too similar to
-<code>ledger-xact-payee</code>, I thought it would be worth refactoring <code>ledger-xact-payee</code>
-into something more general and composable.</p>
-<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-xact-context</span>
-  <span style="color:#48b685">&#34;Return the context of the transaction containing point or nil.&#34;</span>
-  (let ((<span style="color:#ef6155">i</span> <span style="color:#f99b15">0</span>))
-    (while (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span>
-                (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>))
-               <span style="color:#48b685">&#39;acct-transaction</span>)
-      (setq <span style="color:#ef6155">i</span> (<span style="color:#06b6ef">-</span> <span style="color:#ef6155">i</span> <span style="color:#f99b15">1</span>)))
-    (let ((<span style="color:#ef6155">context-info</span> (<span style="color:#ef6155">ledger-context-other-line</span> <span style="color:#ef6155">i</span>)))
-      (if (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">context-info</span>) <span style="color:#48b685">&#39;xact</span>)
-          <span style="color:#ef6155">context-info</span>
-        <span style="color:#ef6155">nil</span>))))
-
-(defun <span style="color:#ef6155">ledger-xact-payee</span> ()
-  <span style="color:#48b685">&#34;Return the payee of the transaction containing point or nil.&#34;</span>
-  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>)))
-    (if <span style="color:#ef6155">xact-context</span>
-        (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>)
-      <span style="color:#ef6155">nil</span>)))</code></pre></div>
-<p>This way, we can just use <code>ledger-context-field-value</code> to get the date or payee.
-I have, in fact, submitted a <a href="https://github.com/ledger/ledger-mode/pull/168">PR</a> to ledger-mode. I hope it will be accepted!</p>
-<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
-  (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">1</span>)
-  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>)))
-    (<span style="color:#06b6ef">list</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;date</span>)
-          (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>))))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(<span style="color:#48b685">&#34;2019/03/29&#34;</span> <span style="color:#48b685">&#34;Richard Stallman&#39;s Gas Station&#34;</span>)</code></pre></div>
-<p>Shazam!</p>
+  (<span style="color:#06b6ef">list</span> (<span style="color:#ef6155">ledger-xact-payee</span>)
+        (<span style="color:#ef6155">ledger-xact-date</span>)))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">(&#34;Richard Stallman&#39;s Gas Station&#34; &#34;2019/03/29&#34;)</code></pre></div>
+<p>Sweet.</p>
 
 <h3 id="the-amount">The Amount</h3>
 
@@ -220,37 +178,21 @@ point, which means we can use <code>(ledger-context-at-point)</code>.</p>
 <div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
   (let ((<span style="color:#ef6155">point-context</span> (<span style="color:#ef6155">ledger-context-at-point</span>)))
-    (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>))
-  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp"><span style="color:#48b685">&#34;-2200 PHP&#34;</span></code></pre></div>
-<h3 id="convenience">Convenience</h3>
-
-<p>We now have everything we need to create a function that can return all the data
-we need in a convenient form.</p>
-<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">airtable--expense-data</span> ()
-  <span style="color:#48b685">&#34;Return transaction data for submitting an expense report.&#34;</span>
-  (let ((<span style="color:#ef6155">xact-context</span> (<span style="color:#ef6155">ledger-xact-context</span>))
-        (<span style="color:#ef6155">point-context</span> (<span style="color:#ef6155">ledger-context-at-point</span>)))
-    (if (and <span style="color:#ef6155">xact-context</span>
-             (<span style="color:#06b6ef">eq</span> (<span style="color:#ef6155">ledger-context-line-type</span> <span style="color:#ef6155">point-context</span>) <span style="color:#48b685">&#39;acct-transaction</span>)
-             (<span style="color:#ef6155">ledger-context-field-present-p</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>))
-        (let ((<span style="color:#ef6155">tx-data</span> (<span style="color:#06b6ef">list</span>))
-              (<span style="color:#ef6155">date</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;date</span>))
-              (<span style="color:#ef6155">payee</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">xact-context</span> <span style="color:#48b685">&#39;payee</span>))
-              (<span style="color:#ef6155">amount</span> (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>)))
-          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;date</span> <span style="color:#ef6155">date</span>)
-          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;payee</span> <span style="color:#ef6155">payee</span>)
-          (<span style="color:#ef6155">map-put</span> <span style="color:#ef6155">tx-data</span> <span style="color:#48b685">&#39;amount</span> <span style="color:#ef6155">amount</span>)
-          <span style="color:#ef6155">tx-data</span>)
-      <span style="color:#ef6155">nil</span>)))
+    (<span style="color:#ef6155">ledger-context-field-value</span> <span style="color:#ef6155">point-context</span> <span style="color:#48b685">&#39;commoditized-amount</span>)))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;-2200 PHP&#34;</code></pre></div>
+<p>This is good, but we can do better. On its own, a string isn&rsquo;t very usable. We
+can make a function that simply returns the value and discards the currency. For
+now, we don&rsquo;t want to support multiple currencies.</p>
+<div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-transaction-amount-value</span> ()
+  <span style="color:#48b685">&#34;Returns the value of the amount of a transaction without its attached currency.&#34;</span>
+  (let ((<span style="color:#ef6155">amount</span> (<span style="color:#ef6155">ledger-context-field-value</span> (<span style="color:#ef6155">ledger-context-at-point</span>)
+                                            <span style="color:#48b685">&#39;commoditized-amount</span>)))
+    (<span style="color:#06b6ef">string-to-number</span> (<span style="color:#06b6ef">car</span> (<span style="color:#ef6155">split-string</span> <span style="color:#ef6155">amount</span>)))))
 
 (save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
-  (<span style="color:#ef6155">airtable--expense-data</span>)
-  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">((<span style="color:#ef6155">amount</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;-2200 PHP&#34;</span>)
- (<span style="color:#ef6155">payee</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Richard Stallman&#39;s Gas Station&#34;</span>)
- (<span style="color:#ef6155">date</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;2019/03/29&#34;</span>))</code></pre></div>
-<p>Now we have a nice, convenient associative data structure containing everything
-we need for the next part.</p>
+  (<span style="color:#ef6155">ledger-transaction-amount-value</span>))</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">-2200</code></pre></div>
+<p>We&rsquo;ll get the absolute value of this number later on, because we never want to
+submit negative expenses.</p>
 
 <h2 id="airtable">Airtable</h2>
 
@@ -335,26 +277,26 @@ payor as &ldquo;Quinns&rdquo; because that&rsquo;s one of two values allowed by 
 <p>We can now create a command to post expenses! Don&rsquo;t forget to make it
 <code>interactive</code>, so we can invoke it from <code>M-x</code>.</p>
 <div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(defun <span style="color:#ef6155">ledger-airtable-post-expense</span> ()
-  <span style="color:#48b685">&#34;Post an expense at point to Airtable.&#34;</span>
+  <span style="color:#48b685">&#34;Post an expense to airtable.&#34;</span>
   (interactive)
-  (let* ((<span style="color:#ef6155">xact-data</span> (<span style="color:#ef6155">airtable--expense-data</span>))
-         (<span style="color:#ef6155">xact-date</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;date</span> <span style="color:#ef6155">xact-data</span>)))
-         (<span style="color:#ef6155">xact-amount</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;amount</span> <span style="color:#ef6155">xact-data</span>)))
-         (<span style="color:#ef6155">xact-payee</span> (<span style="color:#06b6ef">cdr</span> (<span style="color:#06b6ef">assoc</span> <span style="color:#48b685">&#39;payee</span> <span style="color:#ef6155">xact-data</span>)))
-         (<span style="color:#ef6155">amount</span> (<span style="color:#06b6ef">abs</span> (<span style="color:#06b6ef">string-to-number</span> (<span style="color:#06b6ef">car</span> (<span style="color:#ef6155">split-string</span> <span style="color:#ef6155">xact-amount</span>)))))
-         (<span style="color:#ef6155">date</span> (<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;%sT12:00:00.000Z&#34;</span>
-                       (<span style="color:#ef6155">replace-regexp-in-string</span> (<span style="color:#06b6ef">regexp-quote</span> <span style="color:#48b685">&#34;/&#34;</span>) <span style="color:#48b685">&#34;-&#34;</span> <span style="color:#ef6155">xact-date</span>))))
-    (<span style="color:#ef6155">request</span> <span style="color:#ef6155">airtable-secrets-url</span>
+  (let* ((<span style="color:#ef6155">xact-date</span> (<span style="color:#ef6155">ledger-xact-date</span>))
+         (<span style="color:#ef6155">xact-payee</span> (<span style="color:#ef6155">ledger-xact-payee</span>))
+         (<span style="color:#ef6155">xact-amount</span> (<span style="color:#ef6155">ledger-transaction-amount-value</span>))
+         (<span style="color:#ef6155">amount</span> (<span style="color:#06b6ef">abs</span> <span style="color:#ef6155">xact-amount</span>))
+         (<span style="color:#ef6155">date</span> (<span style="color:#ef6155">replace-regexp-in-string</span> (<span style="color:#06b6ef">regexp-quote</span> <span style="color:#48b685">&#34;/&#34;</span>) <span style="color:#48b685">&#34;-&#34;</span> <span style="color:#ef6155">xact-date</span>))
+         (<span style="color:#ef6155">date-time</span> (<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;%sT12:00:00.000Z&#34;</span> <span style="color:#ef6155">date</span>)))
+    (<span style="color:#ef6155">request</span> <span style="color:#ef6155">blog--ledger-airtable-secrets-base-url</span>
              :type <span style="color:#48b685">&#34;POST&#34;</span>
              :sync <span style="color:#ef6155">t</span>
              :parser <span style="color:#48b685">&#39;json-read</span>
-             :data (<span style="color:#ef6155">json-encode</span> <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;fields&#34;</span> <span style="color:#5bc4bf">.</span> ((<span style="color:#48b685">&#34;Short Description&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">xact-payee</span>)
+             :data (<span style="color:#ef6155">json-encode</span> <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;fields&#34;</span> <span style="color:#5bc4bf">.</span> (
+                                               (<span style="color:#48b685">&#34;Date &amp; Time&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">date-time</span>)
                                                (<span style="color:#48b685">&#34;Who Paid?&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;Quinns&#34;</span>)
-                                               (<span style="color:#48b685">&#34;Date &amp; Time&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">date</span>)
                                                (<span style="color:#48b685">&#34;Total&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">amount</span>)
+                                               (<span style="color:#48b685">&#34;Short Description&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span><span style="color:#ef6155">xact-payee</span>)
                                                ))))
              :headers <span style="color:#5bc4bf">`</span>((<span style="color:#48b685">&#34;Content-Type&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#48b685">&#34;application/json&#34;</span>)
-                        (<span style="color:#48b685">&#34;Authorization&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span>(<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;Bearer %s&#34;</span> <span style="color:#ef6155">airtable-secrets-auth-token</span>)))
+                        (<span style="color:#48b685">&#34;Authorization&#34;</span> <span style="color:#5bc4bf">.</span> <span style="color:#5bc4bf">,</span>(<span style="color:#06b6ef">format</span> <span style="color:#48b685">&#34;Bearer %s&#34;</span> <span style="color:#ef6155">blog--ledger-airtable-secrets-auth-token</span>)))
              :success (cl-function
                        (lambda (<span style="color:#815ba4">&amp;key</span> <span style="color:#ef6155">data</span> <span style="color:#815ba4">&amp;allow-other-keys</span>)
                          (<span style="color:#06b6ef">print</span> <span style="color:#48b685">&#34;Expense Posted!&#34;</span>)))
@@ -365,7 +307,7 @@ payor as &ldquo;Quinns&rdquo; because that&rsquo;s one of two values allowed by 
 (save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
   (<span style="color:#ef6155">ledger-airtable-post-expense</span>)
-  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;Expense Posted!&#34;</code></pre></div>
+  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;\n\&#34;Expense Posted!\&#34;\n&#34;</code></pre></div>
 <p>A quick trip to Airtable tells me that indeed, the entry has been posted. Now
 all I have to do is take a picture of the receipt, but that&rsquo;s out of our scope
 because the Airtable mobile app makes that easy.</p>

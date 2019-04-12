@@ -6,7 +6,7 @@
     <description>Recent content in Posts on Levi Tan Ong</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Thu, 11 Apr 2019 20:32:49 +0800</lastBuildDate>
+    <lastBuildDate>Sat, 13 Apr 2019 02:03:42 +0800</lastBuildDate>
     
 	<atom:link href="https://levitanong.com/posts/index.xml" rel="self" type="application/rss+xml" />
     
@@ -14,11 +14,11 @@
     <item>
       <title>Airtable Expense Logging with Ledger Mode</title>
       <link>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</link>
-      <pubDate>Thu, 11 Apr 2019 20:32:49 +0800</pubDate>
+      <pubDate>Sat, 13 Apr 2019 02:03:42 +0800</pubDate>
       
       <guid>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</guid>
-      <description>Summary Many companies and organizations subsidize certain things like transit, food, and lodging for their employees, provided the latter log these expenses via some system defined by the former. My company uses Airtable.&amp;nbsp;1
-If you use Ledger to maintain your personal accounting, or really any other method for that matter (but seriously. Use Ledger), it will be tedious to log your subsidized/reimbursable expenses on both books. Despite the inconvenience, this data is valuable to you, and you should keep track of it to better understand your lifestyle.</description>
+      <description>Changelog 2019/4/13 My PR implementing ledger-xact-date got accepted, so had to rewrite a bunch.
+ Merged payee and date sections into new xact section. Added utility function to get transaction amount value. Changed implementation of final airtable exporting function to make use of ledger-xact-date and ledger-transaction-amount-value  Summary Many companies and organizations subsidize certain things like transit, food, and lodging for their employees, provided the latter log these expenses via some system defined by the former.</description>
     </item>
     
   </channel>
