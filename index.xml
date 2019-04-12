@@ -6,7 +6,7 @@
     <description>Recent content on Levi Tan Ong</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sat, 13 Apr 2019 02:07:22 +0800</lastBuildDate>
+    <lastBuildDate>Sat, 13 Apr 2019 02:12:12 +0800</lastBuildDate>
     
 	<atom:link href="https://levitanong.com/index.xml" rel="self" type="application/rss+xml" />
     
@@ -14,7 +14,7 @@
     <item>
       <title>Airtable Expense Logging with Ledger Mode</title>
       <link>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</link>
-      <pubDate>Sat, 13 Apr 2019 02:07:22 +0800</pubDate>
+      <pubDate>Sat, 13 Apr 2019 02:12:12 +0800</pubDate>
       
       <guid>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</guid>
       <description>Changelog 2019/4/13 My PR implementing ledger-xact-date got accepted, so had to rewrite a bunch.

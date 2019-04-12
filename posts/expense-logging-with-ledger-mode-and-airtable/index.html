@@ -55,7 +55,7 @@
     <main class="content container">
     <div class="post">
   <h1>Airtable Expense Logging with Ledger Mode</h1>
-  <time datetime=2019-04-13T02:07:22&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
+  <time datetime=2019-04-13T02:12:12&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
   
 
 <h2 id="changelog">Changelog</h2>
@@ -172,9 +172,8 @@ work with <code>point</code>, we get to use our cool utility function!</p>
 
 <p>There are always at least two amounts in every <code>xact</code> because of double-entry
 bookkeeping.&nbsp;<sup class="footnote-ref" id="fnref:fn-2"><a href="#fn:fn-2">2</a></sup> Because ledger entries can get more complicated
-than this, we can&rsquo;t just assume the simplest case. Instead, we can just <em>not</em>
-assume and let the user specify it for us! We don&rsquo;t need to travel past our
-point, which means we can use <code>(ledger-context-at-point)</code>.</p>
+than this, we can&rsquo;t just assume the simplest case. Instead, we can let the user
+specify it for us!</p>
 <div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
   (let ((<span style="color:#ef6155">point-context</span> (<span style="color:#ef6155">ledger-context-at-point</span>)))
@@ -307,7 +306,7 @@ payor as &ldquo;Quinns&rdquo; because that&rsquo;s one of two values allowed by 
 (save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">4</span>)
   (<span style="color:#ef6155">ledger-airtable-post-expense</span>)
-  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;\n\&#34;Expense Posted!\&#34;\n&#34;</code></pre></div>
+  )</code></pre></div><div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-text" data-lang="text">&#34;Expense Posted!&#34;</code></pre></div>
 <p>A quick trip to Airtable tells me that indeed, the entry has been posted. Now
 all I have to do is take a picture of the receipt, but that&rsquo;s out of our scope
 because the Airtable mobile app makes that easy.</p>
