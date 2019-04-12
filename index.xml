@@ -6,7 +6,7 @@
     <description>Recent content on Levi Tan Ong</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sat, 13 Apr 2019 02:12:12 +0800</lastBuildDate>
+    <lastBuildDate>Sat, 13 Apr 2019 02:14:59 +0800</lastBuildDate>
     
 	<atom:link href="https://levitanong.com/index.xml" rel="self" type="application/rss+xml" />
     
@@ -14,11 +14,12 @@
     <item>
       <title>Airtable Expense Logging with Ledger Mode</title>
       <link>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</link>
-      <pubDate>Sat, 13 Apr 2019 02:12:12 +0800</pubDate>
+      <pubDate>Sat, 13 Apr 2019 02:14:59 +0800</pubDate>
       
       <guid>https://levitanong.com/posts/expense-logging-with-ledger-mode-and-airtable/</guid>
       <description>Changelog 2019/4/13 My PR implementing ledger-xact-date got accepted, so had to rewrite a bunch.
- Merged payee and date sections into new xact section. Added utility function to get transaction amount value. Changed implementation of final airtable exporting function to make use of ledger-xact-date and ledger-transaction-amount-value  Summary Many companies and organizations subsidize certain things like transit, food, and lodging for their employees, provided the latter log these expenses via some system defined by the former.</description>
+ Merged payee and date sections into new xact section. Added utility function to get transaction amount value. Changed implementation of final airtable exporting function to make use of ledger-xact-date and ledger-transaction-amount-value  2019/4/11 First Release
+Summary Many companies and organizations subsidize certain things like transit, food, and lodging for their employees, provided the latter log these expenses via some system defined by the former.</description>
     </item>
     
   </channel>
