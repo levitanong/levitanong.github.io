@@ -55,7 +55,7 @@
     <main class="content container">
     <div class="post">
   <h1>Airtable Expense Logging with Ledger Mode</h1>
-  <time datetime=2019-04-13T02:03:42&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
+  <time datetime=2019-04-13T02:07:22&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
   
 
 <h2 id="changelog">Changelog</h2>
@@ -160,8 +160,8 @@ payee.</p>
 
 <h3 id="the-xact">The <code>xact</code></h3>
 
-<p>Conveniently, we have <code>ledger-xact-payee</code> and <code>ledger-xact-date</code> <code>point</code>. And
-since both work with <code>point</code>, we get to use our cool utility function!</p>
+<p>Conveniently, we have <code>ledger-xact-payee</code> and <code>ledger-xact-date</code>. Since both
+work with <code>point</code>, we get to use our cool utility function!</p>
 <div class="highlight"><pre style="color:#e7e9db;background-color:#2f1e2e;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-emacs-lisp" data-lang="emacs-lisp">(save-excursion
   (<span style="color:#ef6155">goto-gas-receipt</span> <span style="color:#f99b15">1</span>)
   (<span style="color:#06b6ef">list</span> (<span style="color:#ef6155">ledger-xact-payee</span>)
