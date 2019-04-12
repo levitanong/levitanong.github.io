@@ -3,7 +3,7 @@
 <head>
   <link href="//gmpg.org/xfn/11" rel="profile">
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
-  <meta name="generator" content="Hugo 0.54.0" />
+  <meta name="generator" content="Hugo 0.55.0" />
 
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,8 +55,32 @@
     <main class="content container">
     <div class="post">
   <h1>Airtable Expense Logging with Ledger Mode</h1>
-  <time datetime=2019-04-13T02:20:05&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
+  <time datetime=2019-04-13T04:18:52&#43;0800 class="post-date">Sat, Apr 13, 2019</time>
   
+
+<p><details>
+<summary>
+Changelog
+</summary>
+<p class="details"></p>
+
+<ul>
+<li>2019/4/13
+My <a href="https://github.com/ledger/ledger-mode/pull/168">PR</a> implementing <code>ledger-xact-date</code> got accepted, so had to rewrite a bunch.
+
+<ul>
+<li>Merged payee and date sections into new <code>xact</code> section.</li>
+<li>Added utility function to get transaction amount value.</li>
+<li>Changed implementation of final airtable exporting function to make use of
+<code>ledger-xact-date</code> and <code>ledger-transaction-amount-value</code></li>
+<li>Added metadata to display a custom summary, since the default doesn&rsquo;t
+translate well.</li>
+</ul></li>
+<li>2019/4/11
+First Release
+</p>
+</details></li>
+</ul>
 
 <h2 id="summary">Summary</h2>
 
@@ -75,23 +99,6 @@ efforts in building a set of emacs functions for posting expenses from a Ledger
 file onto Airtable. Because I want this article to be as accessible and as
 informative as possible, I will go through the derivation of this script
 including exploring ledger-mode&rsquo;s implementation.</p>
-
-<h2 id="changelog">Changelog</h2>
-
-<h3 id="2019-4-13">2019/4/13</h3>
-
-<p>My <a href="https://github.com/ledger/ledger-mode/pull/168">PR</a> implementing <code>ledger-xact-date</code> got accepted, so had to rewrite a bunch.</p>
-
-<ul>
-<li>Merged payee and date sections into new <code>xact</code> section.</li>
-<li>Added utility function to get transaction amount value.</li>
-<li>Changed implementation of final airtable exporting function to make use of
-<code>ledger-xact-date</code> and <code>ledger-transaction-amount-value</code></li>
-</ul>
-
-<h3 id="2019-4-11">2019/4/11</h3>
-
-<p>First Release</p>
 
 <h2 id="ledger">Ledger</h2>
 
